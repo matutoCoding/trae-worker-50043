@@ -41,6 +41,7 @@ export default function ReachPage() {
     updateReach,
     deleteReach,
     setCurrentReachId,
+    loadReachData,
   } = useAppStore();
 
   const [tool, setTool] = useState<ToolType>('select');
@@ -70,8 +71,9 @@ export default function ReachPage() {
     };
     await addReach(newReach);
     setCurrentReachId(newReach.id);
+    await loadReachData(newReach.id);
     setSelectedRock(null);
-  }, [reaches.length, addReach, setCurrentReachId]);
+  }, [reaches.length, addReach, setCurrentReachId, loadReachData]);
 
   const handleDeleteReach = useCallback(
     async (id: string) => {
@@ -88,11 +90,12 @@ export default function ReachPage() {
   );
 
   const handleSwitchReach = useCallback(
-    (id: string) => {
+    async (id: string) => {
       setCurrentReachId(id);
+      await loadReachData(id);
       setSelectedRock(null);
     },
-    [setCurrentReachId]
+    [setCurrentReachId, loadReachData]
   );
 
   const handleUpdateReachField = useCallback(

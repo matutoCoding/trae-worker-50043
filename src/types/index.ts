@@ -90,6 +90,7 @@ export interface GateConfig {
   flowRate: number;
   gates: Gate[];
   createdAt: number;
+  updatedAt: number;
 }
 
 export interface GatePass {

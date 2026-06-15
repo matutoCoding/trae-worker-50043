@@ -114,6 +114,16 @@ export default function ReviewPage() {
     date: Date.now(),
   });
 
+  useEffect(() => {
+    setFilters((prev) => ({
+      ...prev,
+      reachId: currentReachId,
+    }));
+    setSelectedSessionId(null);
+    setSelectedMistakeId(null);
+    setExpandedDates(new Set());
+  }, [currentReachId]);
+
   const currentReach = useMemo(
     () => reaches.find((r) => r.id === filters.reachId) || null,
     [reaches, filters.reachId]

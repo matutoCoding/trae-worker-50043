@@ -288,7 +288,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   exportAllData: async () => {
-    const [reaches, waterFeatures, dangerZones, gateConfigs, trainingSessions, athletes, boats, lineLibrary] = await Promise.all([
+    const [reaches, waterFeatures, allDangerZones, gateConfigs, trainingSessions, athletes, boats, lineLibrary] = await Promise.all([
       db.reaches.toArray(),
       db.waterFeatures.toArray(),
       db.dangerZones.toArray(),
@@ -298,6 +298,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
       db.boats.toArray(),
       db.lineLibrary.toArray(),
     ]);
+
+    const validFeatureIds = new Set(waterFeatures.map((f) => f.id));
+    const dangerZones = allDangerZones.filter((z) => validFeatureIds.has(z.featureId));
+
     return {
       version: '1.0',
       exportedAt: new Date().toISOString(),

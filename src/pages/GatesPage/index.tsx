@@ -90,6 +90,7 @@ export default function GatesPage() {
         id: uuidv4(),
         reachId: currentReachId,
         name: '默认门位配置',
+        flowRate: currentFlowRate,
         gates: [],
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -97,7 +98,20 @@ export default function GatesPage() {
       addGateConfig(newConfig);
       setCurrentGateConfigId(newConfig.id);
     }
-  }, [currentReachId, gateConfigs.length, addGateConfig, setCurrentGateConfigId]);
+  }, [currentReachId, currentFlowRate, gateConfigs.length, addGateConfig, setCurrentGateConfigId]);
+
+  useEffect(() => {
+    setSelectedGateId(null);
+    setExpandedGateId(null);
+    if (gateConfigs.length > 0) {
+      const firstConfigForReach = gateConfigs.find((c) => c.reachId === currentReachId);
+      if (firstConfigForReach) {
+        setCurrentGateConfigId(firstConfigForReach.id);
+      } else {
+        setCurrentGateConfigId(null);
+      }
+    }
+  }, [currentReachId, gateConfigs, setSelectedGateId, setCurrentGateConfigId]);
 
   useEffect(() => {
     const warnings: EnergyWarning[] = [];
@@ -148,10 +162,11 @@ export default function GatesPage() {
 
     updateGateConfig({
       ...currentGateConfig,
+      flowRate: currentFlowRate,
       gates: recalculatedGates,
       updatedAt: Date.now(),
     });
-  }, [currentGateConfig, currentReach, sortedGates, waterFeatures, flowVelocity, updateGateConfig]);
+  }, [currentGateConfig, currentReach, currentFlowRate, sortedGates, waterFeatures, flowVelocity, updateGateConfig]);
 
   const handleGateAdd = useCallback(
     (gateData: Omit<Gate, 'id' | 'entryAngle' | 'exitDirection' | 'strokeRhythm' | 'driftOffset' | 'energyLoss' | 'switchPoint'>) => {
@@ -173,11 +188,12 @@ export default function GatesPage() {
 
       updateGateConfig({
         ...currentGateConfig,
+        flowRate: currentFlowRate,
         gates: [...currentGateConfig.gates, newGate],
         updatedAt: Date.now(),
       });
     },
-    [currentGateConfig, currentReach, sortedGates, waterFeatures, flowVelocity, updateGateConfig]
+    [currentGateConfig, currentReach, currentFlowRate, sortedGates, waterFeatures, flowVelocity, updateGateConfig]
   );
 
   const handleGateMove = useCallback(
@@ -211,11 +227,12 @@ export default function GatesPage() {
 
       updateGateConfig({
         ...currentGateConfig,
+        flowRate: currentFlowRate,
         gates: finalGates,
         updatedAt: Date.now(),
       });
     },
-    [currentGateConfig, currentReach, sortedGates, waterFeatures, flowVelocity, updateGateConfig]
+    [currentGateConfig, currentReach, currentFlowRate, sortedGates, waterFeatures, flowVelocity, updateGateConfig]
   );
 
   const handleGateSelect = useCallback(
@@ -246,6 +263,7 @@ export default function GatesPage() {
 
       updateGateConfig({
         ...currentGateConfig,
+        flowRate: currentFlowRate,
         gates: remainingGates,
         updatedAt: Date.now(),
       });
@@ -255,7 +273,7 @@ export default function GatesPage() {
         setExpandedGateId(null);
       }
     },
-    [currentGateConfig, selectedGateId, setSelectedGateId, updateGateConfig]
+    [currentGateConfig, currentFlowRate, selectedGateId, setSelectedGateId, updateGateConfig]
   );
 
   const handleGateTypeChange = useCallback(
@@ -286,11 +304,12 @@ export default function GatesPage() {
 
       updateGateConfig({
         ...currentGateConfig,
+        flowRate: currentFlowRate,
         gates: updatedGates,
         updatedAt: Date.now(),
       });
     },
-    [currentGateConfig, currentReach, sortedGates, waterFeatures, flowVelocity, updateGateConfig]
+    [currentGateConfig, currentReach, currentFlowRate, sortedGates, waterFeatures, flowVelocity, updateGateConfig]
   );
 
   const handleDragStart = (index: number) => {
@@ -343,6 +362,7 @@ export default function GatesPage() {
 
       updateGateConfig({
         ...currentGateConfig,
+        flowRate: currentFlowRate,
         gates: recalculatedGates,
         updatedAt: Date.now(),
       });
