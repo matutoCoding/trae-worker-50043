@@ -119,10 +119,27 @@ export default function ReviewPage() {
       ...prev,
       reachId: currentReachId,
     }));
-    setSelectedSessionId(null);
     setSelectedMistakeId(null);
-    setExpandedDates(new Set());
-  }, [currentReachId]);
+
+    if (currentReachId) {
+      const reachSessions = trainingSessions
+        .filter((s) => s.reachId === currentReachId)
+        .sort((a, b) => b.date - a.date);
+
+      if (reachSessions.length > 0) {
+        const latestSession = reachSessions[0];
+        setSelectedSessionId(latestSession.id);
+        const dateKey = new Date(latestSession.date).toLocaleDateString('zh-CN');
+        setExpandedDates(new Set([dateKey]));
+      } else {
+        setSelectedSessionId(null);
+        setExpandedDates(new Set());
+      }
+    } else {
+      setSelectedSessionId(null);
+      setExpandedDates(new Set());
+    }
+  }, [currentReachId, trainingSessions]);
 
   const currentReach = useMemo(
     () => reaches.find((r) => r.id === filters.reachId) || null,

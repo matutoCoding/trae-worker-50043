@@ -243,10 +243,18 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   replaceWaterFeaturesAndDangers: async (reachId, features, dangers) => {
     await db.transaction('rw', db.waterFeatures, db.dangerZones, async () => {
+      const oldFeatureIds = await db.waterFeatures
+        .where('reachId')
+        .equals(reachId)
+        .toArray()
+        .then((fs) => fs.map((f) => f.id));
+
+      if (oldFeatureIds.length > 0) {
+        await db.dangerZones.where('featureId').anyOf(oldFeatureIds).delete();
+      }
+
       await db.waterFeatures.where('reachId').equals(reachId).delete();
-      const existingFeatureIds = await db.waterFeatures.toArray().then(fs => fs.map(f => f.id));
-      await db.dangerZones.where('featureId').anyOf(existingFeatureIds).delete();
-      
+
       if (features.length > 0) {
         await db.waterFeatures.bulkAdd(features);
       }
@@ -255,17 +263,17 @@ export const useAppStore = create<AppStore>((set, get) => ({
       }
     });
 
-    const [waterFeatures, dangerZones] = await Promise.all([
+    const [waterFeatures, allDangerZones] = await Promise.all([
       db.waterFeatures.where('reachId').equals(reachId).toArray(),
       db.dangerZones.toArray(),
     ]);
 
-    const allFeatureIds = waterFeatures.map(f => f.id);
-    const filteredDangerZones = dangerZones.filter(z => allFeatureIds.includes(z.featureId));
+    const currentFeatureIds = new Set(waterFeatures.map((f) => f.id));
+    const dangerZones = allDangerZones.filter((z) => currentFeatureIds.has(z.featureId));
 
     set({
       waterFeatures,
-      dangerZones: filteredDangerZones,
+      dangerZones,
     });
   },
 
