@@ -26,7 +26,14 @@ const navItems = [
 
 export default function Sidebar({ collapsed }: SidebarProps) {
   const location = useLocation();
-  const { reaches, currentReachId, setCurrentReachId, exportAllData, importData } = useAppStore();
+  const { reaches, currentReachId, setCurrentReachId, loadReachData, exportAllData, importData } = useAppStore();
+
+  const handleReachChange = async (reachId: string) => {
+    setCurrentReachId(reachId);
+    if (reachId) {
+      await loadReachData(reachId);
+    }
+  };
 
   const handleExport = async () => {
     try {
@@ -77,7 +84,7 @@ export default function Sidebar({ collapsed }: SidebarProps) {
           <label className="text-xs text-gray-400 px-1 mb-1 block">当前河段</label>
           <select
             value={currentReachId || ''}
-            onChange={(e) => setCurrentReachId(e.target.value)}
+            onChange={(e) => handleReachChange(e.target.value)}
             className="select-field text-sm"
           >
             {reaches.map((reach) => (

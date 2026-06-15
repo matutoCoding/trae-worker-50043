@@ -57,6 +57,7 @@ export default function ReadingPage() {
     deleteDangerZone,
     setWaterFeatures,
     setDangerZones,
+    replaceWaterFeaturesAndDangers,
   } = useAppStore();
 
   const [tool, setTool] = useState<'select' | 'feature' | 'pan'>('select');
@@ -95,25 +96,17 @@ export default function ReadingPage() {
   const maxFlow = currentReach ? currentReach.baseFlow * 3 : 50;
 
   const handleAutoRecognize = useCallback(async () => {
-    if (!currentReach) return;
+    if (!currentReach || !currentReachId) return;
 
     setIsAutoRecognizing(true);
     try {
       const { features, dangers } = calculateWaterFeatures(currentReach, currentFlowRate);
-
-      const existingIds = waterFeatures.map((f) => f.id);
-      const filteredDangers = dangers.filter((d) => !existingIds.includes(d.featureId));
-
-      for (const feature of features) {
-        await addWaterFeature(feature);
-      }
-      for (const danger of filteredDangers) {
-        await addDangerZone(danger);
-      }
+      await replaceWaterFeaturesAndDangers(currentReachId, features, dangers);
+      setSelectedFeatureId(null);
     } finally {
       setIsAutoRecognizing(false);
     }
-  }, [currentReach, currentFlowRate, waterFeatures, addWaterFeature, addDangerZone]);
+  }, [currentReach, currentReachId, currentFlowRate, replaceWaterFeaturesAndDangers, setSelectedFeatureId]);
 
   const handleFeatureAdd = useCallback(
     async (feature: Omit<WaterFeature, 'id'>) => {
@@ -182,12 +175,8 @@ export default function ReadingPage() {
   );
 
   useEffect(() => {
-    if (currentReach && waterFeatures.length === 0) {
-      const { features, dangers } = calculateWaterFeatures(currentReach, currentFlowRate);
-      setWaterFeatures(features);
-      setDangerZones(dangers);
-    }
-  }, [currentReach, currentFlowRate, waterFeatures.length, setWaterFeatures, setDangerZones]);
+    setSelectedFeatureId(null);
+  }, [currentReachId, setSelectedFeatureId]);
 
   const featureTypeButtons: Array<{ type: WaterFeatureType; label: string; icon: typeof Waves }> = [
     { type: 'wave', label: '翻滚浪', icon: Waves },

@@ -568,11 +568,26 @@ export default function ReviewPage() {
 
   const formatDateTime = (timestamp: number) => {
     return new Date(timestamp).toLocaleString('zh-CN', {
-      month: 'short',
-      day: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
     });
+  };
+
+  const formatDateTimeForInput = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
+  const parseDateTimeInput = (value: string) => {
+    if (!value) return Date.now();
+    return new Date(value).getTime();
   };
 
   const getAthleteName = (athleteId: string) => {
@@ -608,7 +623,16 @@ export default function ReviewPage() {
               训练回溯分析
             </h1>
             <button
-              onClick={() => setShowNewSessionForm(true)}
+              onClick={() => {
+                setNewSessionForm({
+                  reachId: currentReachId || '',
+                  gateConfigId: '',
+                  athleteId: '',
+                  boatId: '',
+                  date: Date.now(),
+                });
+                setShowNewSessionForm(true);
+              }}
               className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-sm font-medium transition-colors"
             >
               <Plus className="w-4 h-4" />
@@ -1487,11 +1511,11 @@ export default function ReviewPage() {
                 <label className="block text-sm text-gray-400 mb-1">训练日期</label>
                 <input
                   type="datetime-local"
-                  value={new Date(newSessionForm.date).toISOString().slice(0, 16)}
+                  value={formatDateTimeForInput(newSessionForm.date)}
                   onChange={(e) =>
                     setNewSessionForm((prev) => ({
                       ...prev,
-                      date: new Date(e.target.value).getTime(),
+                      date: parseDateTimeInput(e.target.value),
                     }))
                   }
                   className="w-full px-3 py-2 bg-deep-sea-800 border border-deep-sea-700 rounded-lg text-white focus:outline-none focus:border-orange-500"

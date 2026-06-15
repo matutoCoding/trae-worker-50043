@@ -1,10 +1,11 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import {
-  Trash2, GripVertical, RefreshCw, AlertTriangle, ChevronDown, ChevronUp, Zap, Target, Waves, ArrowRightLeft, Activity } from 'lucide-react';
+  Trash2, GripVertical, RefreshCw, AlertTriangle, ChevronDown, ChevronUp, Zap, Target, Waves, ArrowRightLeft, Activity, Plus
+} from 'lucide-react';
 import ReachCanvas from '@/components/Canvas/ReachCanvas';
 import { useAppStore } from '@/store/useAppStore';
-import type { Gate, GateType } from '@/types';
+import type { Gate, GateType, GateConfig } from '@/types';
 import { GATE_TYPE_LABELS } from '@/types';
 import {
   calculateGateStrategy,
@@ -34,9 +35,11 @@ export default function GatesPage() {
     currentFlowRate,
     selectedGateId,
     setSelectedGateId,
+    setCurrentGateConfigId,
     reaches,
     waterFeatures,
     gateConfigs,
+    addGateConfig,
     updateGateConfig,
   } = useAppStore();
 
@@ -82,12 +85,27 @@ export default function GatesPage() {
   );
 
   useEffect(() => {
+    if (currentReachId && gateConfigs.length === 0) {
+      const newConfig: GateConfig = {
+        id: uuidv4(),
+        reachId: currentReachId,
+        name: '默认门位配置',
+        gates: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      addGateConfig(newConfig);
+      setCurrentGateConfigId(newConfig.id);
+    }
+  }, [currentReachId, gateConfigs.length, addGateConfig, setCurrentGateConfigId]);
+
+  useEffect(() => {
     const warnings: EnergyWarning[] = [];
-    
+
     for (let i = 1; i < sortedGates.length; i++) {
       const prevGate = sortedGates[i - 1];
       const currentGate = sortedGates[i];
-      
+
       const result = calculateEnergyLossBetweenGates(
         prevGate,
         currentGate,
@@ -104,7 +122,7 @@ export default function GatesPage() {
         });
       }
     }
-    
+
     setEnergyWarnings(warnings);
   }, [sortedGates, flowVelocity]);
 
@@ -140,11 +158,13 @@ export default function GatesPage() {
       if (!currentGateConfig || !currentReach) return;
 
       const prevGate = sortedGates.length > 0 ? sortedGates[sortedGates.length - 1] : null;
-      
+      const nextNumber = sortedGates.length + 1;
+
       const newGate = calculateGateStrategy(
         {
           ...gateData,
           id: uuidv4(),
+          number: nextNumber,
         },
         prevGate,
         waterFeatures,
@@ -284,7 +304,7 @@ export default function GatesPage() {
   const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
     if (dragState.dragIndex !== index) {
-      setDragState((prev) => ({ ...prev, dragOverIndex: index });
+      setDragState((prev) => ({ ...prev, dragOverIndex: index }));
     }
   };
 
@@ -432,440 +452,450 @@ export default function GatesPage() {
           <div className="flex-1 overflow-y-auto">
             {sortedGates.length === 0 ? (
               <div className="p-8 text-center text-gray-500">
+                <Target className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>暂无门位</p>
+                <p className="text-sm mt-1">点击"添加门"后在画布上放置</p>
+              </div>
+            ) : (
+              <div className="p-2">
+                {sortedGates.map((gate, index) => {
+                  const warning = getGateWarning(gate.id);
+                  const isExpanded = expandedGateId === gate.id;
+                  const isSelected = selectedGateId === gate.id;
+                  const isDragging = dragState.dragIndex === index;
+                  const isDragOver = dragState.dragOverIndex === index;
+
+                  return (
+                    <div
+                      key={gate.id}
+                      draggable
+                      onDragStart={() => handleDragStart(index)}
+                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDragEnd={handleDragEnd}
+                      className={`mb-2 rounded-lg border transition-all ${
+                        isSelected
+                          ? 'bg-deep-sea-700 border-orange-500'
+                          : 'bg-deep-sea-800 border-deep-sea-700/50 hover:bg-deep-sea-750'
+                      } ${isDragging ? 'opacity-50' : ''} ${
+                        isDragOver ? 'border-orange-400 border-dashed' : ''
+                      }`}
+                    >
+                      <div
+                        className="flex items-center gap-2 p-3 cursor-pointer"
+                        onClick={() => handleGateSelect(gate)}
+                      >
+                        <div className="cursor-grab active:cursor-grabbing text-gray-500 hover:text-gray-300">
+                          <GripVertical className="w-4 h-4" />
+                        </div>
+
+                        <div
+                          className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                            gate.type === 'upstream'
+                              ? 'bg-green-600 text-white'
+                              : 'bg-red-600 text-white'
+                          }`}
+                        >
+                          {gate.number}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-white truncate">
+                            {GATE_TYPE_LABELS[gate.type]}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            位置: ({Math.round(gate.x)}, {Math.round(gate.y)})
+                          </div>
+                        </div>
+
+                        {hasHighEnergyWarning(gate.id) && (
+                          <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0" />
+                        )}
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedGateId(isExpanded ? null : gate.id);
+                          }}
+                          className="p-1 text-gray-400 hover:text-white"
+                        >
+                          {isExpanded ? (
+                            <ChevronUp className="w-4 h-4" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4" />
+                          )}
+                        </button>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleGateDelete(gate.id);
+                          }}
+                          className="p-1 text-gray-500 hover:text-red-400"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="px-3 pb-3 pt-0">
+                          <div className="grid grid-cols-2 gap-2 mb-3">
+                            <div>
+                              <label className="text-xs text-gray-400 mb-1 block">类型</label>
+                              <select
+                                value={gate.type}
+                                onChange={(e) =>
+                                  handleGateTypeChange(gate.id, e.target.value as GateType)
+                                }
+                                className="w-full px-2 py-1.5 bg-deep-sea-700 border border-deep-sea-600 rounded text-sm text-white"
+                              >
+                                <option value="downstream">顺水门</option>
+                                <option value="upstream">逆水门</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-400 mb-1 block">角度</label>
+                              <input
+                                type="number"
+                                value={gate.angle}
+                                onChange={(e) => {
+                                  const newAngle = Number(e.target.value);
+                                  handleGateMove({ ...gate, angle: newAngle });
+                                }}
+                                className="w-full px-2 py-1.5 bg-deep-sea-700 border border-deep-sea-600 rounded text-sm text-white"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="p-2 bg-deep-sea-900/50 rounded">
+                            <div className="flex items-center justify-between text-xs mb-1">
+                              <span className="text-gray-400">能量损耗</span>
+                              <span
+                                className={`font-medium ${
+                                  gate.energyLoss > ENERGY_LOSS_THRESHOLD
+                                    ? 'text-red-400'
+                                    : gate.energyLoss > 0.3
+                                    ? 'text-yellow-400'
+                                    : 'text-green-400'
+                                }`}
+                              >
+                                {(gate.energyLoss * 100).toFixed(1)}%
+                              </span>
+                            </div>
+                            <div className="h-1.5 bg-deep-sea-700 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full ${getEnergyLossColor(gate.energyLoss)} transition-all`}
+                                style={{ width: `${Math.min(100, gate.energyLoss * 100)}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {warning?.warning && (
+                            <div className="mt-2 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded">
+                              <p className="text-xs text-yellow-400">{warning.warning}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="h-12 bg-deep-sea-900 border-b border-deep-sea-700/50 flex items-center justify-between px-4">
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-400">
+                门位数量: <span className="text-white font-medium">{gates.length}</span>
+              </span>
+              <span className="text-sm text-gray-400">
+                当前流量: <span className="text-white font-medium">{currentFlowRate} m³/s</span>
+              </span>
+              <span className="text-sm text-gray-400">
+                流速: <span className="text-white font-medium">{flowVelocity.toFixed(2)} m/s</span>
+              </span>
+            </div>
+            {energyWarnings.length > 0 && (
+              <div className="flex items-center gap-2 px-3 py-1 bg-yellow-500/10 border border-yellow-500/30 rounded">
+                <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                <span className="text-sm text-yellow-400">
+                  {energyWarnings.length} 个能量损耗警告
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex-1 relative">
+            {currentReach ? (
+              <ReachCanvas
+                reach={currentReach}
+                features={waterFeatures}
+                gates={sortedGates}
+                editable={true}
+                onGateAdd={handleGateAdd}
+                onGateMove={handleGateMove}
+                onGateSelect={handleGateSelect}
+                selectedGateId={selectedGateId}
+                flowVelocity={flowVelocity}
+                tool={tool}
+                gateType={gateTypeToAdd}
+                showLinePath={true}
+                showFlowArrows={true}
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full text-gray-500">
+                <div className="text-center">
+                  <Plus className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>请先选择一个河段</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="w-96 flex flex-col bg-deep-sea-900 border-l border-deep-sea-700/50 overflow-y-auto">
+          <div className="p-4 border-b border-deep-sea-700/50">
+            <h2 className="text-lg font-semibold text-white">计算结果</h2>
+          </div>
+
+          {!selectedGate ? (
+            <div className="flex-1 flex items-center justify-center p-8 text-center text-gray-500">
               <Target className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>暂无门位</p>
-              <p className="text-sm mt-1">点击"添加门"后在画布上放置</p>
+              <p>选择一个门位查看详细计算结果</p>
             </div>
           ) : (
-            <div className="p-2">
-              {sortedGates.map((gate, index) => {
-                const warning = getGateWarning(gate.id);
-                const isExpanded = expandedGateId === gate.id;
-                const isSelected = selectedGateId === gate.id;
-                const isDragging = dragState.dragIndex === index;
-                const isDragOver = dragState.dragOverIndex === index;
-
-                return (
+            <div className="p-4 space-y-4">
+              <div className={`p-4 rounded-lg bg-gradient-to-br ${getEnergyLossBg(selectedGate.energyLoss)} border border-deep-sea-700/50`}>
+                <div className="flex items-center gap-3 mb-3">
                   <div
-                    key={gate.id}
-                    draggable
-                    onDragStart={() => handleDragStart(index)}
-                    onDragOver={(e) => handleDragOver(e, index)}
-                    onDragEnd={handleDragEnd}
-                    className={`mb-2 rounded-lg border transition-all ${
-                      isSelected
-                        ? 'bg-deep-sea-700 border-orange-500'
-                        : 'bg-deep-sea-800 border-deep-sea-700/50 hover:bg-deep-sea-750'
-                    } ${isDragging ? 'opacity-50' : ''} ${
-                      isDragOver ? 'border-orange-400 border-dashed' : ''}`}
+                    className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold ${
+                      selectedGate.type === 'upstream'
+                        ? 'bg-green-600 text-white'
+                        : 'bg-red-600 text-white'
+                    }`}
                   >
-                    <div
-                      className="flex items-center gap-2 p-3 cursor-pointer"
-                      onClick={() => handleGateSelect(gate)}
-                    >
-                      <div className="cursor-grab active:cursor-grabbing text-gray-500 hover:text-gray-300">
-                        <GripVertical className="w-4 h-4" />
-                      </div>
-
-                      <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                          gate.type === 'upstream'
-                            ? 'bg-green-600 text-white'
-                            : 'bg-red-600 text-white'
-                        }`}
-                      >
-                        {gate.number}
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-white truncate">
-                          {GATE_TYPE_LABELS[gate.type]}
-                        </div>
-                        <div className="text-xs text-gray-400">
-                          位置: ({Math.round(gate.x)}, {Math.round(gate.y)})
-                        </div>
-                      </div>
-
-                      {hasHighEnergyWarning(gate.id) && (
-                        <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0" />
-                      )}
-
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setExpandedGateId(isExpanded ? null : gate.id);
-                        }}
-                        className="p-1 text-gray-400 hover:text-white"
-                      >
-                        {isExpanded ? (
-                          <ChevronUp className="w-4 h-4" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4" />
-                        )}
-                      </button>
-
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleGateDelete(gate.id);
-                        }}
-                        className="p-1 text-gray-500 hover:text-red-400"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    {isExpanded && (
-                      <div className="px-3 pb-3 pt-0">
-                        <div className="grid grid-cols-2 gap-2 mb-3">
-                          <div>
-                            <label className="text-xs text-gray-400 mb-1 block">类型</label>
-                            <select
-                              value={gate.type}
-                              onChange={(e) =>
-                                handleGateTypeChange(gate.id, e.target.value as GateType)
-                              }
-                              className="w-full px-2 py-1.5 bg-deep-sea-700 border border-deep-sea-600 rounded text-sm text-white"
-                            >
-                              <option value="downstream">顺水门</option>
-                              <option value="upstream">逆水门</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="text-xs text-gray-400 mb-1 block">角度</label>
-                            <input
-                              type="number"
-                              value={gate.angle}
-                              onChange={(e) => {
-                                const newAngle = Number(e.target.value);
-                                handleGateMove({ ...gate, angle: newAngle });
-                              }}
-                              className="w-full px-2 py-1.5 bg-deep-sea-700 border border-deep-sea-600 rounded text-sm text-white"
-                            />
-                          </div>
-                        </div>
-
-                        <div className={`p-2 bg-deep-sea-900/50 rounded">
-                          <div className="flex items-center justify-between text-xs mb-1">
-                          <span className="text-gray-400">能量损耗</span>
-                          <span
-                            className={`font-medium ${
-                              gate.energyLoss > ENERGY_LOSS_THRESHOLD
-                                ? 'text-red-400'
-                                : gate.energyLoss > 0.3
-                                ? 'text-yellow-400'
-                                : 'text-green-400'
-                            }`}
-                          >
-                            {(gate.energyLoss * 100).toFixed(1)}%
-                          </span>
-                        </div>
-                        <div className="h-1.5 bg-deep-sea-700 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full ${getEnergyLossColor(gate.energyLoss)} transition-all`}
-                            style={{ width: `${Math.min(100, gate.energyLoss * 100)}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {warning?.warning && (
-                        <div className="mt-2 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded">
-                          <p className="text-xs text-yellow-400">{warning.warning}</p>
-                        </div>
-                      )}
-                    </div>
+                    {selectedGate.number}
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-
-    <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="h-12 bg-deep-sea-900 border-b border-deep-sea-700/50 flex items-center justify-between px-4">
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-400">
-            门位数量: <span className="text-white font-medium">{gates.length}</span>
-          </span>
-          <span className="text-sm text-gray-400">
-            当前流量: <span className="text-white font-medium">{currentFlowRate} m³/s</span>
-          </span>
-          <span className="text-sm text-gray-400">
-            流速: <span className="text-white font-medium">{flowVelocity.toFixed(2)} m/s</span>
-          </span>
-        </div>
-        {energyWarnings.length > 0 && (
-          <div className="flex items-center gap-2 px-3 py-1 bg-yellow-500/10 border border-yellow-500/30 rounded">
-            <AlertTriangle className="w-4 h-4 text-yellow-500" />
-            <span className="text-sm text-yellow-400">
-              {energyWarnings.length} 个能量损耗警告
-            </span>
-          </div>
-        )}
-      </div>
-
-      <div className="flex-1 relative">
-        <ReachCanvas
-          reach={currentReach}
-          features={waterFeatures}
-          gates={sortedGates}
-          editable={true}
-          onGateAdd={handleGateAdd}
-          onGateMove={handleGateMove}
-          onGateSelect={handleGateSelect}
-          selectedGateId={selectedGateId}
-          flowVelocity={flowVelocity}
-          tool={tool}
-          gateType={gateTypeToAdd}
-          showLinePath={true}
-          showFlowArrows={true}
-        />
-      </div>
-    </div>
-
-    <div className="w-96 flex flex-col bg-deep-sea-900 border-l border-deep-sea-700/50 overflow-y-auto">
-      <div className="p-4 border-b border-deep-sea-700/50">
-        <h2 className="text-lg font-semibold text-white">计算结果</h2>
-      </div>
-
-      {!selectedGate ? (
-        <div className="flex-1 flex items-center justify-center p-8 text-center text-gray-500">
-          <Target className="w-12 h-12 mx-auto mb-3 opacity-50" />
-          <p>选择一个门位查看详细计算结果</p>
-        </div>
-      ) : (
-        <div className="p-4 space-y-4">
-          <div className={`p-4 rounded-lg bg-gradient-to-br ${getEnergyLossBg(selectedGate.energyLoss)} border border-deep-sea-700/50`}>
-            <div className="flex items-center gap-3 mb-3">
-              <div
-                className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold ${
-                  selectedGate.type === 'upstream'
-                    ? 'bg-green-600 text-white'
-                    : 'bg-red-600 text-white'
-                }`}
-              >
-                {selectedGate.number}
-              </div>
-              <div>
-                <h3 className="text-white font-semibold">
-                  第 {selectedGate.number} 道 - {GATE_TYPE_LABELS[selectedGate.type]}
-                </h3>
-                <p className="text-sm text-gray-400">
-                  位置: ({Math.round(selectedGate.x)}, {Math.round(selectedGate.y)})
-                </p>
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between text-sm mb-1">
-                <span className="text-gray-400">能量损耗系数</span>
-                <span
-                  className={`font-semibold ${
-                    selectedGate.energyLoss > ENERGY_LOSS_THRESHOLD
-                      ? 'text-red-400'
-                      : selectedGate.energyLoss > 0.3
-                      ? 'text-yellow-400'
-                      : 'text-green-400'
-                  }`}
-                >
-                  {(selectedGate.energyLoss * 100).toFixed(1)}%
-                </span>
-              </div>
-              <div className="h-2 bg-deep-sea-700 rounded-full overflow-hidden">
-                <div
-                  className={`h-full ${getEnergyLossColor(selectedGate.energyLoss)} transition-all`}
-                  style={{ width: `${Math.min(100, selectedGate.energyLoss * 100)}%` }}
-                />
-              </div>
-              <div className="flex justify-between text-xs text-gray-500 mt-1">
-                <span>低</span>
-                <span>中</span>
-                <span>高</span>
-              </div>
-            </div>
-          </div>
-
-          {getGateWarning(selectedGate.id)?.warning && (
-            <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg flex items-start gap-2">
-              <AlertTriangle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-yellow-400">
-                {getGateWarning(selectedGate.id)?.warning}
-              </p>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 bg-deep-sea-800 rounded-lg border border-deep-sea-700/50">
-              <div className="flex items-center gap-2 mb-2">
-                <Target className="w-4 h-4 text-blue-400" />
-                <span className="text-xs text-gray-400">进门角度</span>
-              </div>
-              <p className="text-xl font-bold text-white">
-                {selectedGate.entryAngle.toFixed(1)}°
-              </p>
-            </div>
-
-            <div className="p-3 bg-deep-sea-800 rounded-lg border border-deep-sea-700/50">
-              <div className="flex items-center gap-2 mb-2">
-                <ArrowRightLeft className="w-4 h-4 text-purple-400" />
-                <span className="text-xs text-gray-400">出门方向</span>
-              </div>
-              <p className="text-xl font-bold text-white">
-                {selectedGate.exitDirection.toFixed(1)}°
-              </p>
-            </div>
-
-            <div className="p-3 bg-deep-sea-800 rounded-lg border border-deep-sea-700/50">
-              <div className="flex items-center gap-2 mb-2">
-                <Waves className="w-4 h-4 text-cyan-400" />
-                <span className="text-xs text-gray-400">划水节奏</span>
-              </div>
-              <p className="text-xl font-bold text-white">
-                {selectedGate.strokeRhythm.strokes} 桨
-              </p>
-              <p className="text-xs text-gray-400">
-                {selectedGate.strokeRhythm.cadence} 桨/分钟
-              </p>
-            </div>
-
-            <div className="p-3 bg-deep-sea-800 rounded-lg border border-deep-sea-700/50">
-              <div className="flex items-center gap-2 mb-2">
-                <Activity className="w-4 h-4 text-orange-400" />
-                <span className="text-xs text-gray-400">横推偏移</span>
-              </div>
-              <p className="text-xl font-bold text-white">
-                {selectedGate.driftOffset.lateral.toFixed(1)} m
-              </p>
-              <p className="text-xs text-gray-400">
-                提前量: {selectedGate.driftOffset.leadRequired.toFixed(1)} m
-              </p>
-            </div>
-          </div>
-
-          {selectedGate.switchPoint && (
-            <div className="p-4 bg-deep-sea-800 rounded-lg border border-deep-sea-700/50">
-              <div className="flex items-center gap-2 mb-3">
-                <Zap className="w-4 h-4 text-yellow-400" />
-                <span className="text-sm font-medium text-white">
-                  最优切换点
-                </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${
-                    selectedGate.switchPoint.type === 'backward'
-                      ? 'bg-purple-600'
-                      : selectedGate.switchPoint.type === 'support'
-                      ? 'bg-cyan-600'
-                      : 'bg-green-600'
-                  }`}
-                >
-                  {selectedGate.switchPoint.type === 'backward'
-                    ? '倒'
-                    : selectedGate.switchPoint.type === 'support'
-                    ? '支'
-                    : '正'}
+                  <div>
+                    <h3 className="text-white font-semibold">
+                      第 {selectedGate.number} 道 - {GATE_TYPE_LABELS[selectedGate.type]}
+                    </h3>
+                    <p className="text-sm text-gray-400">
+                      位置: ({Math.round(selectedGate.x)}, {Math.round(selectedGate.y)})
+                    </p>
+                  </div>
                 </div>
+
                 <div>
-                  <p className="text-sm font-medium text-white">
-                    {selectedGate.switchPoint.type === 'backward'
-                      ? '倒桨支撑'
-                      : selectedGate.switchPoint.type === 'support'
-                      ? '支撑划'
-                      : '正划'}
+                  <div className="flex items-center justify-between text-sm mb-1">
+                    <span className="text-gray-400">能量损耗系数</span>
+                    <span
+                      className={`font-semibold ${
+                        selectedGate.energyLoss > ENERGY_LOSS_THRESHOLD
+                          ? 'text-red-400'
+                          : selectedGate.energyLoss > 0.3
+                          ? 'text-yellow-400'
+                          : 'text-green-400'
+                      }`}
+                    >
+                      {(selectedGate.energyLoss * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="h-2 bg-deep-sea-700 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full ${getEnergyLossColor(selectedGate.energyLoss)} transition-all`}
+                      style={{ width: `${Math.min(100, selectedGate.energyLoss * 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>低</span>
+                    <span>中</span>
+                    <span>高</span>
+                  </div>
+                </div>
+              </div>
+
+              {getGateWarning(selectedGate.id)?.warning && (
+                <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg flex items-start gap-2">
+                  <AlertTriangle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-yellow-400">
+                    {getGateWarning(selectedGate.id)?.warning}
+                  </p>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-deep-sea-800 rounded-lg border border-deep-sea-700/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Target className="w-4 h-4 text-blue-400" />
+                    <span className="text-xs text-gray-400">进门角度</span>
+                  </div>
+                  <p className="text-xl font-bold text-white">
+                    {selectedGate.entryAngle.toFixed(1)}°
+                  </p>
+                </div>
+
+                <div className="p-3 bg-deep-sea-800 rounded-lg border border-deep-sea-700/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ArrowRightLeft className="w-4 h-4 text-purple-400" />
+                    <span className="text-xs text-gray-400">出门方向</span>
+                  </div>
+                  <p className="text-xl font-bold text-white">
+                    {selectedGate.exitDirection.toFixed(1)}°
+                  </p>
+                </div>
+
+                <div className="p-3 bg-deep-sea-800 rounded-lg border border-deep-sea-700/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Waves className="w-4 h-4 text-cyan-400" />
+                    <span className="text-xs text-gray-400">划水节奏</span>
+                  </div>
+                  <p className="text-xl font-bold text-white">
+                    {selectedGate.strokeRhythm.strokes} 桨
                   </p>
                   <p className="text-xs text-gray-400">
-                    位置: ({Math.round(selectedGate.switchPoint.position.x)},{' '}
-                    {Math.round(selectedGate.switchPoint.position.y)})
+                    {selectedGate.strokeRhythm.cadence} 桨/分钟
                   </p>
+                </div>
+
+                <div className="p-3 bg-deep-sea-800 rounded-lg border border-deep-sea-700/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Activity className="w-4 h-4 text-orange-400" />
+                    <span className="text-xs text-gray-400">横推偏移</span>
+                  </div>
+                  <p className="text-xl font-bold text-white">
+                    {selectedGate.driftOffset.lateral.toFixed(1)} m
+                  </p>
+                  <p className="text-xs text-gray-400">
+                    提前量: {selectedGate.driftOffset.leadRequired.toFixed(1)} m
+                  </p>
+                </div>
+              </div>
+
+              {selectedGate.switchPoint && (
+                <div className="p-4 bg-deep-sea-800 rounded-lg border border-deep-sea-700/50">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Zap className="w-4 h-4 text-yellow-400" />
+                    <span className="text-sm font-medium text-white">
+                      最优切换点
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${
+                        selectedGate.switchPoint.type === 'backward'
+                          ? 'bg-purple-600'
+                          : selectedGate.switchPoint.type === 'support'
+                          ? 'bg-cyan-600'
+                          : 'bg-green-600'
+                      }`}
+                    >
+                      {selectedGate.switchPoint.type === 'backward'
+                        ? '倒'
+                        : selectedGate.switchPoint.type === 'support'
+                        ? '支'
+                        : '正'}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-white">
+                        {selectedGate.switchPoint.type === 'backward'
+                          ? '倒桨支撑'
+                          : selectedGate.switchPoint.type === 'support'
+                          ? '支撑划'
+                          : '正划'}
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        位置: ({Math.round(selectedGate.switchPoint.position.x)},{' '}
+                        {Math.round(selectedGate.switchPoint.position.y)})
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="p-4 bg-deep-sea-800 rounded-lg border border-deep-sea-700/50">
+                <h4 className="text-sm font-medium text-white mb-3">路线参数</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">门位角度</span>
+                    <span className="text-white">{selectedGate.angle.toFixed(1)}°</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">X 坐标</span>
+                    <span className="text-white">{selectedGate.x.toFixed(1)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Y 坐标</span>
+                    <span className="text-white">{selectedGate.y.toFixed(1)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">门类型</span>
+                    <span className="text-white">
+                      {GATE_TYPE_LABELS[selectedGate.type]}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
-          <div className="p-4 bg-deep-sea-800 rounded-lg border border-deep-sea-700/50">
-            <h4 className="text-sm font-medium text-white mb-3">路线参数</h4>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-400">门位角度</span>
-                <span className="text-white">{selectedGate.angle.toFixed(1)}°</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">X 坐标</span>
-                <span className="text-white">{selectedGate.x.toFixed(1)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Y 坐标</span>
-                <span className="text-white">{selectedGate.y.toFixed(1)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">门类型</span>
-                <span className="text-white">
-                  {GATE_TYPE_LABELS[selectedGate.type]}
-                </span>
+          {sortedGates.length >= 2 && (
+            <div className="p-4 border-t border-deep-sea-700/50">
+              <h3 className="text-sm font-medium text-white mb-3">全段统计</h3>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">总门数</span>
+                  <span className="text-white">{sortedGates.length}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">顺水门</span>
+                  <span className="text-red-400">
+                    {sortedGates.filter((g) => g.type === 'downstream').length}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">逆水门</span>
+                  <span className="text-green-400">
+                    {sortedGates.filter((g) => g.type === 'upstream').length}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">平均能量损耗</span>
+                  <span
+                    className={`font-medium ${
+                      sortedGates.reduce((sum, g) => sum + g.energyLoss, 0) /
+                        sortedGates.length >
+                      ENERGY_LOSS_THRESHOLD
+                        ? 'text-red-400'
+                        : 'text-green-400'
+                    }`}
+                  >
+                    {(
+                      (sortedGates.reduce((sum, g) => sum + g.energyLoss, 0) /
+                        sortedGates.length) *
+                      100
+                    ).toFixed(1)}%
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">总桨数估算</span>
+                  <span className="text-white">
+                    {sortedGates.reduce((sum, g) => sum + g.strokeRhythm.strokes, 0)} 桨
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">能量警告数</span>
+                  <span className={energyWarnings.length > 0 ? 'text-yellow-400' : 'text-green-400'}>
+                    {energyWarnings.length}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
-      )}
-
-      {sortedGates.length >= 2 && (
-        <div className="p-4 border-t border-deep-sea-700/50">
-          <h3 className="text-sm font-medium text-white mb-3">全段统计</h3>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-400">总门数</span>
-              <span className="text-white">{sortedGates.length}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-400">顺水门</span>
-              <span className="text-red-400">
-                {sortedGates.filter((g) => g.type === 'downstream').length}
-              </span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-400">逆水门</span>
-              <span className="text-green-400">
-                {sortedGates.filter((g) => g.type === 'upstream').length}
-              </span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-400">平均能量损耗</span>
-              <span
-                className={`font-medium ${
-                  sortedGates.reduce((sum, g) => sum + g.energyLoss, 0) /
-                    sortedGates.length >
-                  ENERGY_LOSS_THRESHOLD
-                    ? 'text-red-400'
-                    : 'text-green-400'
-                }`}
-              >
-                {(
-                  (sortedGates.reduce((sum, g) => sum + g.energyLoss, 0) /
-                  sortedGates.length *
-                  100
-                ).toFixed(1)}%
-              </span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-400">总桨数估算</span>
-              <span className="text-white">
-                {sortedGates.reduce((sum, g) => sum + g.strokeRhythm.strokes, 0)} 桨
-              </span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-400">能量警告数</span>
-              <span className={energyWarnings.length > 0 ? 'text-yellow-400' : 'text-green-400'}>
-                {energyWarnings.length}
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
     </div>
-  </div>
-</div>
   );
 }

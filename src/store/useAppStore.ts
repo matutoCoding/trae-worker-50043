@@ -48,6 +48,7 @@ interface AppStore extends AppState {
   deleteLineFromLibrary: (id: string) => Promise<void>;
   setWaterFeatures: (features: WaterFeature[]) => void;
   setDangerZones: (zones: DangerZone[]) => void;
+  replaceWaterFeaturesAndDangers: (reachId: string, features: WaterFeature[], dangers: DangerZone[]) => Promise<void>;
   loadReachData: (reachId: string) => Promise<void>;
   exportAllData: () => Promise<unknown>;
   importData: (data: unknown) => Promise<boolean>;
@@ -239,6 +240,34 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   setWaterFeatures: (features) => set({ waterFeatures: features }),
   setDangerZones: (zones) => set({ dangerZones: zones }),
+
+  replaceWaterFeaturesAndDangers: async (reachId, features, dangers) => {
+    await db.transaction('rw', db.waterFeatures, db.dangerZones, async () => {
+      await db.waterFeatures.where('reachId').equals(reachId).delete();
+      const existingFeatureIds = await db.waterFeatures.toArray().then(fs => fs.map(f => f.id));
+      await db.dangerZones.where('featureId').anyOf(existingFeatureIds).delete();
+      
+      if (features.length > 0) {
+        await db.waterFeatures.bulkAdd(features);
+      }
+      if (dangers.length > 0) {
+        await db.dangerZones.bulkAdd(dangers);
+      }
+    });
+
+    const [waterFeatures, dangerZones] = await Promise.all([
+      db.waterFeatures.where('reachId').equals(reachId).toArray(),
+      db.dangerZones.toArray(),
+    ]);
+
+    const allFeatureIds = waterFeatures.map(f => f.id);
+    const filteredDangerZones = dangerZones.filter(z => allFeatureIds.includes(z.featureId));
+
+    set({
+      waterFeatures,
+      dangerZones: filteredDangerZones,
+    });
+  },
 
   loadReachData: async (reachId) => {
     const [waterFeatures, dangerZones, gateConfigs, trainingSessions] = await Promise.all([
